@@ -4,22 +4,29 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DetailPage from './DetailPage';
+import { app, database } from './firebase.js';
+import { collection, addDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { useCollection } from "react-firebase-hooks/firestore";
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
   const [text, setText] = useState("");
   const [notes, setNotes] = useState([]);
+  const [values, loading, error] = useCollection(collection(database, "notes"));
+  const data = values?.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
 
-  useEffect(() => {
-    loadNotes();
-  }, []);
-
-  function submitButton() {
-    alert("You have submitted: " + text)
-    setNotes(prevNotes => [...notes, { key: notes.length, value: text }])
-    setText("")
-  }
+  const submitButton = async () => {
+    try {
+      alert("You have submitted: " + text);
+      await addDoc(collection(database, "notes"), {
+        text: text
+      });
+      setText("");
+    } catch (e) {
+      console.error("Error adding document: ", e);
+    }
+  };
 
   const loadNotes = async () => {
     try {
@@ -41,31 +48,75 @@ export default function App() {
     }
   };
 
+  const handleEditNote = async (editedText, noteId) => {
+    try {
+      const noteRef = doc(database, "notes", noteId);
+      await updateDoc(noteRef, { text: editedText });
+    } catch (error) {
+      console.error('Error updating note:', error);
+    }
+  };
+
+  const handleDeleteNote = async (id) => {
+    try {
+      const noteRef = doc(database, "notes", id);
+      await deleteDoc(noteRef);
+    } catch (error) {
+      console.error('Error deleting note:', error);
+    }
+  };
+
   return (
     <NavigationContainer>
       <Stack.Navigator initialRouteName='Home'>
         <Stack.Screen name="Home">
-          {(props) => <Home {...props} submitButton={submitButton} loadNotes={loadNotes} saveNotes={saveNotes} notes={notes} setText={setText} text={text} setNotes={setNotes} />}
+          {(props) => (
+            <Home
+              {...props}
+              submitButton={submitButton}
+              loadNotes={loadNotes}
+              saveNotes={saveNotes}
+              notes={notes}
+              setText={setText}
+              text={text}
+              setNotes={setNotes}
+              data={data}
+              handleDeleteNote={handleDeleteNote}
+              handleEditNote={handleEditNote}
+            />
+          )}
         </Stack.Screen>
 
         <Stack.Screen name="DetailPage">
-          {(props) => <DetailPage {...props} saveNotes={saveNotes} notes={notes} setNotes={setNotes} />}
+          {(props) => (
+            <DetailPage
+              {...props}
+              onSave={(editedText) => handleEditNote(editedText, props.route.params.note.id)}
+            />
+          )}
         </Stack.Screen>
-
-
       </Stack.Navigator>
     </NavigationContainer>
   );
 }
 
-const Home = ({ navigation, route, submitButton, loadNotes, saveNotes, notes, setText, text, setNotes }) => {
+const Home = ({ navigation, route, submitButton, loadNotes, saveNotes, notes, setText, text, setNotes, data, handleDeleteNote }) => {
   const handleItemPress = (item) => {
-    navigation.navigate('DetailPage', { message: item.value });
+    navigation.navigate('DetailPage', { note: item });
   };
 
   const truncateNote = (note) => {
     return note.length > 30 ? note.substring(0, 30) + "..." : note;
   };
+
+  const renderItem = ({ item }) => (
+    <TouchableOpacity onPress={() => handleItemPress(item)}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={styles.note}>{truncateNote(item.text)}</Text>
+        <Button title="Delete" onPress={() => handleDeleteNote(item.id)} />
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={styles.container}>
@@ -74,17 +125,13 @@ const Home = ({ navigation, route, submitButton, loadNotes, saveNotes, notes, se
       <TextInput style={styles.input} placeholder='Type Something' onChangeText={setText} value={text} />
       <Button title='Submit' onPress={submitButton} color="#841584" />
       <FlatList
-        data={notes}
-        renderItem={({ item }) => (
-          <TouchableOpacity onPress={() => handleItemPress(item)}>
-            <Text style={styles.note}>{truncateNote(item.value)}</Text>
-          </TouchableOpacity>
-        )}
+        data={data}
+        renderItem={renderItem}
       />
       <View style={styles.buttonContainer}>
-        <Button title='Save Notes' onPress={saveNotes} />
-        <Button title='Load Notes' onPress={loadNotes} />
-        <Button title='Clear Notes' onPress={() => setNotes([])} />
+        <Button title='Save Notes' onPress={saveNotes} style={styles.button} />
+        <Button title='Load Notes' onPress={loadNotes} style={styles.button} />
+        <Button title='Clear Notes' onPress={() => setNotes([])} style={styles.button} />
       </View>
     </View>
   );
@@ -122,4 +169,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     width: '100%',
   },
+  button: {
+    marginBottom: 10,
+  }
 });

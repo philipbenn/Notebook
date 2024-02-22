@@ -1,18 +1,11 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TextInput, Button } from 'react-native';
 
-const DetailPage = ({ navigation, route, saveNotes, notes, setNotes }) => {
-  const [editedMessage, setEditedMessage] = useState(route.params?.message);
+const DetailPage = ({ navigation, route, onSave }) => {
+  const [editedMessage, setEditedMessage] = useState(route.params?.note.text);
 
   const handleSaveNote = () => {
-    const updatedNotes = (notes).map(note => {
-      if (note.value === route.params?.message) {
-        return { ...note, value: editedMessage };
-      }
-      return note;
-    });
-    setNotes(updatedNotes);
-    saveNotes();
+    onSave(editedMessage);
     navigation.goBack();
   };
 
